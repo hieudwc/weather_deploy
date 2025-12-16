@@ -9,7 +9,7 @@ from tensorflow.keras.models import load_model
 
 @st.cache_resource
 def load_artifacts():
-    model = load_model("weather_models/best_weather_model.h5")
+    model = load_model("weather_models/best_weather_model.h5", compile=False)
     with open("weather_models/scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
     last_seq = np.load("weather_models/last_sequence.npy")
