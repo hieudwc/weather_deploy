@@ -9,6 +9,16 @@ from folium.features import DivIcon
 from streamlit_folium import st_folium
 
 # =====================================================
+# SESSION STATE (QUAN TRỌNG – FIX MAP BIẾN MẤT)
+# =====================================================
+
+if "map_obj" not in st.session_state:
+    st.session_state.map_obj = None
+
+if "forecast_real" not in st.session_state:
+    st.session_state.forecast_real = None
+
+# =====================================================
 # LOAD MODEL & ARTIFACTS
 # =====================================================
 
@@ -16,7 +26,7 @@ from streamlit_folium import st_folium
 def load_artifacts():
     model = load_model(
         "weather_models/best_weather_model.h5",
-        compile=False   # QUAN TRỌNG: tránh lỗi Keras version
+        compile=False   # FIX LỖI KERAS VERSION
     )
     with open("weather_models/scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
@@ -37,7 +47,6 @@ st.set_page_config(
 
 st.title("🌦️ Weather Forecasting System")
 st.write("Dự báo **nhiệt độ – độ ẩm – lượng mưa** bằng Deep Learning (RNN / LSTM)")
-
 st.warning("⚠️ Dự báo dài hạn có độ không chắc chắn cao, chỉ mang tính tham khảo.")
 
 # =====================================================
@@ -47,11 +56,11 @@ st.warning("⚠️ Dự báo dài hạn có độ không chắc chắn cao, ch�
 days = st.selectbox(
     "📅 Chọn số ngày dự báo",
     options=[7, 30],
-    index=1
+    index=0
 )
 
 # =====================================================
-# FORECAST FUNCTION (ITERATIVE MULTI-STEP)
+# FORECAST FUNCTION
 # =====================================================
 
 def forecast_iterative(model, last_sequence, n_steps):
@@ -77,7 +86,7 @@ def forecast_iterative(model, last_sequence, n_steps):
     return np.array(forecasts)
 
 # =====================================================
-# COLOR FUNCTION FOR MAP
+# COLOR FUNCTION
 # =====================================================
 
 def get_color(temp):
@@ -91,28 +100,18 @@ def get_color(temp):
         return "red"
 
 # =====================================================
-# MAIN PREDICTION
+# BUTTON – RUN FORECAST & BUILD MAP
 # =====================================================
 
 if st.button("🔮 Dự báo"):
+    # ---------- FORECAST ----------
     forecast_scaled = forecast_iterative(model, last_seq, days)
     forecast_real = scaler.inverse_transform(forecast_scaled)
 
-    st.subheader(f"📊 Kết quả dự báo {days} ngày")
+    # LƯU KẾT QUẢ VÀO SESSION
+    st.session_state.forecast_real = forecast_real
 
-    # -------- LINE CHART --------
-    chart_df = pd.DataFrame({
-        "Temperature (°C)": forecast_real[:, 0],
-        "Humidity (%)": forecast_real[:, 1],
-        "Rainfall (mm)": forecast_real[:, 2]
-    })
-
-    st.line_chart(chart_df)
-
-    # =================================================
-    # MAP DATA (VIỆT NAM - DEMO THEO VÙNG)
-    # =================================================
-
+    # ---------- MAP DATA ----------
     base_temp = forecast_real[0, 0]
 
     map_data = pd.DataFrame({
@@ -137,10 +136,7 @@ if st.button("🔮 Dự báo"):
         ]
     })
 
-    # =================================================
-    # FOLIUM MAP
-    # =================================================
-
+    # ---------- BUILD MAP ----------
     center_lat = map_data["lat"].mean()
     center_lon = map_data["lon"].mean()
 
@@ -157,12 +153,12 @@ if st.button("🔮 Dự báo"):
         lat, lon = row["lat"], row["lon"]
         city = row["City"]
 
-        # ----- RNN -----
+        # RNN
         temp_rnn = row["Temp_RNN"]
         color_rnn = get_color(temp_rnn)
 
         folium.CircleMarker(
-            location=[lat, lon],
+            [lat, lon],
             radius=8,
             color=color_rnn,
             fill=True,
@@ -171,12 +167,12 @@ if st.button("🔮 Dự báo"):
             popup=f"<b>{city}</b><br>RNN: {temp_rnn:.1f}°C"
         ).add_to(fg_rnn)
 
-        # ----- LSTM -----
+        # LSTM
         temp_lstm = row["Temp_LSTM"]
         color_lstm = get_color(temp_lstm)
 
         folium.CircleMarker(
-            location=[lat, lon],
+            [lat, lon],
             radius=8,
             color=color_lstm,
             fill=True,
@@ -185,7 +181,7 @@ if st.button("🔮 Dự báo"):
             popup=f"<b>{city}</b><br>LSTM: {temp_lstm:.1f}°C"
         ).add_to(fg_lstm)
 
-        # ----- LABEL -----
+        # LABEL
         folium.Marker(
             [lat, lon],
             icon=DivIcon(
@@ -209,13 +205,37 @@ if st.button("🔮 Dự báo"):
     fg_lstm.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
 
-    # =================================================
-    # SHOW MAP
-    # =================================================
+    # ✅ LƯU MAP VÀO SESSION (QUAN TRỌNG)
+    st.session_state.map_obj = m
 
+# =====================================================
+# HIỂN THỊ BIỂU ĐỒ (OUTSIDE BUTTON)
+# =====================================================
+
+if st.session_state.forecast_real is not None:
+    st.subheader(f"📊 Biểu đồ dự báo {days} ngày")
+
+    chart_df = pd.DataFrame({
+        "Temperature (°C)": st.session_state.forecast_real[:, 0],
+        "Humidity (%)": st.session_state.forecast_real[:, 1],
+        "Rainfall (mm)": st.session_state.forecast_real[:, 2]
+    })
+
+    st.line_chart(chart_df)
+
+# =====================================================
+# HIỂN THỊ MAP (OUTSIDE BUTTON – KHÔNG BAO GIỜ MẤT)
+# =====================================================
+
+if st.session_state.map_obj is not None:
     st.subheader("🗺️ Bản đồ dự báo nhiệt độ Việt Nam")
     st.caption("Màu sắc thể hiện mức nhiệt, có thể bật/tắt RNN – LSTM")
 
-    st_folium(m, width=900, height=600)
+    st_folium(
+        st.session_state.map_obj,
+        width=900,
+        height=600,
+        key="weather_map"   # ⚠️ BẮT BUỘC CÓ KEY
+    )
 
-    st.success("✅ Dự báo hoàn tất")
+    st.success("✅ Dự báo & hiển thị bản đồ hoàn tất")
