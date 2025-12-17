@@ -1,5 +1,7 @@
 streamlit
+streamlit-folium
 numpy
 pandas
 scikit-learn
 tensorflow-cpu
+folium
