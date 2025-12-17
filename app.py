@@ -9,7 +9,7 @@ from folium.features import DivIcon
 from streamlit_folium import st_folium
 
 # =====================================================
-# SESSION STATE (QUAN TRỌNG – FIX MAP BIẾN MẤT)
+# SESSION STATE – FIX TRIỆT ĐỂ MAP BIẾN MẤT
 # =====================================================
 
 if "map_obj" not in st.session_state:
@@ -17,6 +17,9 @@ if "map_obj" not in st.session_state:
 
 if "forecast_real" not in st.session_state:
     st.session_state.forecast_real = None
+
+if "show_map" not in st.session_state:
+    st.session_state.show_map = False
 
 # =====================================================
 # LOAD MODEL & ARTIFACTS
@@ -26,7 +29,7 @@ if "forecast_real" not in st.session_state:
 def load_artifacts():
     model = load_model(
         "weather_models/best_weather_model.h5",
-        compile=False   # FIX LỖI KERAS VERSION
+        compile=False  # FIX KERAS VERSION
     )
     with open("weather_models/scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
@@ -100,18 +103,17 @@ def get_color(temp):
         return "red"
 
 # =====================================================
-# BUTTON – RUN FORECAST & BUILD MAP
+# BUTTON – ONLY SET STATE (KHÔNG RENDER MAP)
 # =====================================================
 
 if st.button("🔮 Dự báo"):
-    # ---------- FORECAST ----------
+    # -------- FORECAST --------
     forecast_scaled = forecast_iterative(model, last_seq, days)
     forecast_real = scaler.inverse_transform(forecast_scaled)
 
-    # LƯU KẾT QUẢ VÀO SESSION
     st.session_state.forecast_real = forecast_real
 
-    # ---------- MAP DATA ----------
+    # -------- MAP DATA --------
     base_temp = forecast_real[0, 0]
 
     map_data = pd.DataFrame({
@@ -136,7 +138,7 @@ if st.button("🔮 Dự báo"):
         ]
     })
 
-    # ---------- BUILD MAP ----------
+    # -------- BUILD MAP --------
     center_lat = map_data["lat"].mean()
     center_lon = map_data["lon"].mean()
 
@@ -155,28 +157,24 @@ if st.button("🔮 Dự báo"):
 
         # RNN
         temp_rnn = row["Temp_RNN"]
-        color_rnn = get_color(temp_rnn)
-
         folium.CircleMarker(
             [lat, lon],
             radius=8,
-            color=color_rnn,
+            color=get_color(temp_rnn),
             fill=True,
-            fill_color=color_rnn,
+            fill_color=get_color(temp_rnn),
             fill_opacity=0.8,
             popup=f"<b>{city}</b><br>RNN: {temp_rnn:.1f}°C"
         ).add_to(fg_rnn)
 
         # LSTM
         temp_lstm = row["Temp_LSTM"]
-        color_lstm = get_color(temp_lstm)
-
         folium.CircleMarker(
             [lat, lon],
             radius=8,
-            color=color_lstm,
+            color=get_color(temp_lstm),
             fill=True,
-            fill_color=color_lstm,
+            fill_color=get_color(temp_lstm),
             fill_opacity=0.8,
             popup=f"<b>{city}</b><br>LSTM: {temp_lstm:.1f}°C"
         ).add_to(fg_lstm)
@@ -205,11 +203,12 @@ if st.button("🔮 Dự báo"):
     fg_lstm.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
 
-    # ✅ LƯU MAP VÀO SESSION (QUAN TRỌNG)
+    # 🔑 CHỈ SET STATE
     st.session_state.map_obj = m
+    st.session_state.show_map = True
 
 # =====================================================
-# HIỂN THỊ BIỂU ĐỒ (OUTSIDE BUTTON)
+# SHOW CHART (OUTSIDE BUTTON)
 # =====================================================
 
 if st.session_state.forecast_real is not None:
@@ -224,10 +223,10 @@ if st.session_state.forecast_real is not None:
     st.line_chart(chart_df)
 
 # =====================================================
-# HIỂN THỊ MAP (OUTSIDE BUTTON – KHÔNG BAO GIỜ MẤT)
+# SHOW MAP (OUTSIDE BUTTON – FIX 100%)
 # =====================================================
 
-if st.session_state.map_obj is not None:
+if st.session_state.show_map and st.session_state.map_obj is not None:
     st.subheader("🗺️ Bản đồ dự báo nhiệt độ Việt Nam")
     st.caption("Màu sắc thể hiện mức nhiệt, có thể bật/tắt RNN – LSTM")
 
@@ -235,7 +234,7 @@ if st.session_state.map_obj is not None:
         st.session_state.map_obj,
         width=900,
         height=600,
-        key="weather_map"   # ⚠️ BẮT BUỘC CÓ KEY
+        key="weather_map_stable"
     )
 
     st.success("✅ Dự báo & hiển thị bản đồ hoàn tất")
